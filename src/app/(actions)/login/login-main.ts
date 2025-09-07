@@ -4,6 +4,7 @@ import { supabaseAdmin } from "../../lib/supabase/server";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
 export async function createUser(formData: FormData) {
   const email = formData.get("email")?.toString(); // get email
@@ -111,6 +112,7 @@ export async function validateUser(formData: FormData) {
 
 export async function logoutUser() {
   const cookieData = await cookies();
-  cookieData.set("access", "", { path: "/" });
+  cookieData.set("access", "", { path: "/" }); // clear their cookies to remove session
   cookieData.set("refresh", "", { path: "/" });
+  redirect("/"); // after logout return them to the home page as they are unauthorised
 }

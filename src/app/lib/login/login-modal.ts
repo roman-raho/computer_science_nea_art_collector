@@ -1,12 +1,16 @@
 import { create } from "zustand";
 
 type LoginModalState = {
-  isOpen: null | "login" | "signup";
+  isOpen: null | "login" | "signup" | "email-verif";
   open: () => void;
   close: () => void;
   toggle: () => void;
   switchToLogin: () => void;
   switchToSignup: () => void;
+  switchToEmailVerif: () => void;
+  userCreated: object | null;
+  setUserCreated: (user: object) => void;
+  clearUserCreated: () => void;
 };
 
 export const useLoginModal = create<LoginModalState>((set) => ({
@@ -19,4 +23,8 @@ export const useLoginModal = create<LoginModalState>((set) => ({
     })),
   switchToLogin: () => set({ isOpen: "login" }),
   switchToSignup: () => set({ isOpen: "signup" }),
+  switchToEmailVerif: () => set({ isOpen: "email-verif" }),
+  userCreated: null,
+  setUserCreated: (user) => set({ userCreated: user }),
+  clearUserCreated: () => set({ userCreated: null }),
 }));

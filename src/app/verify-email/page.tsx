@@ -14,7 +14,7 @@ export default async function Email_Verification_Page({
   }
   const result = await validateEmail(token)
 
-  if (!result.ok) {
+  if (result.ok) {
     redirect('/')
   }
 

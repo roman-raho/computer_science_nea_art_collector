@@ -61,15 +61,16 @@ export default function LoginPopup() {
         </button>
       </form>
     )
-  } else {
+  } else if (isOpen === "signup") {
     return <SignUpPopup />
+  } else {
+    return <EmailVerificationPopup />
   }
 }
 
 function SignUpPopup() {
-  const { isOpen, close, switchToLogin } = useLoginModal()
+  const { isOpen, close, switchToLogin, switchToEmailVerif, setUserCreated } = useLoginModal()
   const [error, setError] = useState<string | null>(null);
-  const router = useRouter()
 
   async function handleSubmit(formData: FormData) {
     const result = await createUser(formData);
@@ -77,8 +78,8 @@ function SignUpPopup() {
       setError(result.error || "An unknown error occurred");
     } else {
       setError(null);
-      router.replace(result.verifyUrl!);
-      close();
+      setUserCreated(result);
+      switchToEmailVerif();
     }
   }
 
@@ -131,4 +132,29 @@ function SignUpPopup() {
       </button>
     </form>
   )
+}
+
+function EmailVerificationPopup() {
+
+  const { isOpen, close, userCreated } = useLoginModal();
+  const router = useRouter();
+
+  async function handleEmailVerification() {
+    router.replace(userCreated?.verifyUrl)
+    close();
+  }
+
+  if (isOpen !== "email-verif") return null
+
+  return (
+    <div
+      className='fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white border border-gray-300 py-5 px-6 rounded-lg shadow-lg z-50 flex flex-col'
+      onClick={(e) => e.stopPropagation()}
+    >
+      <h2>Verify Email</h2>
+      <button onClick={handleEmailVerification} className='text-green-500 hover:text-green-700'>Verify</button>
+      <button onClick={close} className='hover:text-neutral-700'>Skip</button>
+    </div>
+  )
+
 }

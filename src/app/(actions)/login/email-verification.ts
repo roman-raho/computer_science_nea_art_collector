@@ -3,7 +3,10 @@
 import { supabaseAdmin } from "../../lib/supabase/server";
 
 export async function validateEmail(token: string) {
-  const { data: emailVerificationData, error: emailVerificationDataError } =
+  const {
+    data: emailVerificationData,
+    error: emailVerificationDataError,
+  } = // get the data from the email_verification table to perform checks on
     await supabaseAdmin
       .from("email_verifications")
       .select("expires_at, used")
@@ -26,7 +29,7 @@ export async function validateEmail(token: string) {
     return { ok: false, reason: "Token has expired" };
   }
 
-  const { data } = await supabaseAdmin
+  const { data } = await supabaseAdmin // update token to show that it has been used so it cannot be reused
     .from("email_verifications")
     .update({ used: true })
     .eq("token", token)
@@ -37,7 +40,7 @@ export async function validateEmail(token: string) {
     return { ok: false, reason: "Failed to update token" };
   }
 
-  await supabaseAdmin
+  await supabaseAdmin // set email verified to true for the user
     .from("users")
     .update({ email_verified: true })
     .eq("id", data.user_id);
