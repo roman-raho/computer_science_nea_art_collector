@@ -8,8 +8,8 @@ type LoginModalState = {
   switchToLogin: () => void;
   switchToSignup: () => void;
   switchToEmailVerif: () => void;
-  userCreated: object | null;
-  setUserCreated: (user: object) => void;
+  userCreated: any;
+  setUserCreated: (user: any) => void;
   clearUserCreated: () => void;
 };
 
