@@ -1,12 +1,13 @@
 "use server";
 
-import { loginDetailsSchema } from "@/app/types/login";
+import { loginDetailsSchema, passwordChangeSchema } from "@/app/types/login";
 import { supabaseAdmin } from "../../lib/supabase/server";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { jwtVerify } from "jose";
+import { refreshAccessToken } from "@/app/utils/refresh-token";
 
 export async function createUser(formData: FormData) {
   const email = formData.get("email")?.toString(); // get email
@@ -165,8 +166,18 @@ export async function validateUser(formData: FormData) {
     const cookieStore = await cookies();
 
     // store it in cookies
-    cookieStore.set("access", accessToken, { httpOnly: true });
-    cookieStore.set("refresh", refreshToken, { httpOnly: true });
+    cookieStore.set("access", accessToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/",
+    });
+    cookieStore.set("refresh", refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/",
+    });
 
     await supabaseAdmin
       .from("refresh_tokens")
@@ -179,8 +190,31 @@ export async function validateUser(formData: FormData) {
 
 export async function logoutUser() {
   const cookieData = await cookies();
+  const refreshToken = cookieData.get("refresh")?.value;
+  const enc = new TextEncoder();
+
   cookieData.set("access", "", { path: "/" }); // clear their cookies to remove session
   cookieData.set("refresh", "", { path: "/" });
+
+  if (!refreshToken) {
+    redirect("/");
+  }
+
+  try {
+    const { payload } = await jwtVerify(
+      // get payload from jwt
+      refreshToken,
+      enc.encode(process.env.JWT_SECRET!)
+    );
+    const jti = payload.jti as string; // use to find id of jwt to set as used
+    await supabaseAdmin
+      .from("refresh_tokens")
+      .update({ revoked: true }) // set as revoked
+      .eq("id", jti);
+  } catch (err) {
+    console.log(err);
+  }
+
   redirect("/"); // after logout return them to the home page as they are unauthorised
 }
 
@@ -191,30 +225,101 @@ export async function validatePassword(formData: FormData) {
 
   const cookieStore = await cookies();
   const token = cookieStore.get("access")?.value; // get access token from cookie store
+  console.log(cookieStore);
 
-  if (!token) return { success: false, error: "Invalid cookies." };
+  let userId: string;
 
-  const secret = new TextEncoder().encode(process.env.JWT_SECRET); // get the secret to decode jwt
-
-  const { payload } = await jwtVerify(token, secret); // get the data from the jwt (specifically the user_id)
-
-  const userId = payload.userId as string; // get user id
-
+  if (token) {
+    try {
+      const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+      const { payload } = await jwtVerify(token, secret);
+      userId = payload.userId as string;
+    } catch {
+      const refreshResult = await refreshAccessToken();
+      if (!refreshResult.success) {
+        return { success: false, error: "Session Expired" };
+      }
+      userId = refreshResult.userId!;
+    }
+  } else {
+    const refreshResult = await refreshAccessToken();
+    if (!refreshResult) {
+      return { success: false, error: "Session expired." };
+    }
+    userId = refreshResult.userId!;
+  }
   const { data: userData } = await supabaseAdmin
     .from("users")
     .select("*")
     .eq("id", userId)
-    .single(); // lookup user in table to access password
+    .single();
 
-  const isMatch = await bcrypt.compare(password, userData.password_hash); // check password matches
+  const isMatch = await bcrypt.compare(password, userData.password_hash);
 
-  if (isMatch) return { success: true }; // if does return success
+  if (isMatch) return { success: true };
+
+  return { success: false, error: "Incorrect password." };
 }
 
-// export async function changePassword(formData: FormData) {
-//   const pass = formData.get("pass1")?.toString().trim();
-//   const passConfirm = formData.get("pass2")?.toString().trim();
+export async function updatePassword(formData: FormData) {
+  const newPassword = formData.get("pass1")?.toString().trim(); // get password 1 and 2
+  const confirmPassword = formData.get("pass2")?.toString().trim();
 
-//   if (!pass || !passConfirm)
-//     return { success: false, error: "Missing required fields" };
-// }
+  if (!newPassword || !confirmPassword)
+    // check fields are filled
+    return { success: false, error: "Missing required fields." };
+
+  if (newPassword !== confirmPassword)
+    // check they are equal
+    return { success: false, error: "Passwords do not match." };
+
+  const result = passwordChangeSchema.safeParse(newPassword);
+
+  if (!result.success) {
+    // check type is correct
+    return {
+      success: false,
+      error: "Password must incl. 1 number, 1 special char and min 8 char.",
+    };
+  }
+
+  const newSalt = await bcrypt.genSalt(); // generate new salt
+  const newHashPassword = await bcrypt.hash(newPassword, newSalt); // encrypt
+
+  const cookieData = await cookies();
+  const accessToken = cookieData.get("access")?.value; // get cookeis for userId
+
+  let userId: string;
+
+  if (accessToken) {
+    // update cookies and get userId
+    try {
+      const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+      const { payload } = await jwtVerify(accessToken, secret);
+      userId = payload.userId as string;
+    } catch {
+      const refreshResult = await refreshAccessToken();
+      if (!refreshResult.success) {
+        return { success: false, error: "Session Expired" };
+      }
+      userId = refreshResult.userId!;
+    }
+  } else {
+    const refreshResult = await refreshAccessToken();
+    if (!refreshResult) {
+      return { success: false, error: "Session expired." };
+    }
+    userId = refreshResult.userId!;
+  }
+
+  const { error: passwordChangeError } = await supabaseAdmin // update password + get error
+    .from("users")
+    .update({ password_hash: newHashPassword })
+    .eq("id", userId);
+
+  if (passwordChangeError)
+    // if error then tell user
+    return { success: false, error: "Updating password error." };
+
+  return { success: true }; // succes = true
+}

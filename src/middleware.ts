@@ -69,7 +69,7 @@ export async function middleware(request: NextRequest) {
       // create new access token
       const accessToken = jwt.sign(
         // generate new cookeis for refresh
-        { userId: refreshTokenData.user_id, jti: jtiNew },
+        { userId: refreshTokenData.user_id },
         process.env.JWT_SECRET!,
         { expiresIn: "15m" }
       );
@@ -106,6 +106,13 @@ export async function middleware(request: NextRequest) {
         .from("refresh_tokens")
         .update({ revoked: true })
         .eq("id", jti);
+
+      response.headers.set("X-Frame-Options", "SAMEORIGIN"); // stop site being put in iframes (clickjacking)
+      response.headers.set("X-Content-Type-Options", "nosniff"); // tell browser not to guess file types
+      response.headers.set(
+        "Referrer-Policy",
+        "strict-origin-when-cross-origin"
+      ); // limit what referrer info gets sent
 
       return response; // return the response to the client
     }
