@@ -2,9 +2,9 @@
 
 import { createUser, validateUser } from '@/app/(actions)/login/login-main';
 import { useLoginModal } from '@/app/lib/login/login-modal';
-import { useRouter } from 'next/navigation';
 import React, { useState } from 'react'
 import { IoMdClose } from "react-icons/io";
+import emailjs from '@emailjs/browser';
 
 export default function LoginPopup() {
   const { isOpen, close, switchToSignup } = useLoginModal()
@@ -78,8 +78,27 @@ function SignUpPopup() {
       setError(result.error || "An unknown error occurred");
     } else {
       setError(null);
-      setUserCreated(result);
-      switchToEmailVerif();
+      setUserCreated(result); // store the email of the created user
+      sendOTP(result.email!, result.OTP!); // send OTP to the user's email
+    }
+
+  }
+
+  async function sendOTP(email: string, otp: number) {
+    try {
+      await emailjs.send( // send email using emailjs
+        process.env.NEXT_PUBLIC_EMAIL_JS_SERVICE_ID!,
+        process.env.NEXT_PUBLIC_EMAIL_JS_TEMPLATE_ID!,
+        {
+          to_email: email,
+          otp_code: otp,
+        },
+        process.env.NEXT_PUBLIC_EMAIL_JS_PUBLIC!,
+      );
+      switchToEmailVerif(); // switch to email verification popup to enter OTP
+    } catch (error) {
+      console.log(error)
+      setError("Failed to send OTP email. Please try again.");
     }
   }
 
@@ -137,11 +156,9 @@ function SignUpPopup() {
 function EmailVerificationPopup() {
 
   const { isOpen, close, userCreated } = useLoginModal();
-  const router = useRouter();
 
   async function handleEmailVerification() {
-    router.replace(userCreated?.verifyUrl)
-    close();
+    return
   }
 
   if (isOpen !== "email-verif") return null

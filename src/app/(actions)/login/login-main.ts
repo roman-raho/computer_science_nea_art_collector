@@ -61,7 +61,9 @@ export async function createUser(formData: FormData) {
     return { success: false, error: "Failed to create user." };
   }
 
-  const randomEmailVerificationToken = crypto.randomUUID(); // generate random token for email verification
+  const randomEmailVerificationToken = Math.floor(
+    100000 + Math.random() * 900000
+  ); // generate random 6 digit number
 
   await supabaseAdmin.from("email_verifications").insert([
     // insert a row into the email verification table storing the token that will be used to verify
@@ -69,13 +71,11 @@ export async function createUser(formData: FormData) {
       user_id: userData.id,
       token: randomEmailVerificationToken,
       used: false,
-      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24hr
+      expires_at: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
     },
   ]);
 
-  const verifyUrl = `/verify-email?token=${randomEmailVerificationToken}`; // to push to the router to verify email (will always work in v1 for simplicity)
-
-  return { success: true, verifyUrl };
+  return { success: true, OTP: randomEmailVerificationToken, email: email };
 }
 
 export async function validateUser(formData: FormData) {
@@ -132,7 +132,7 @@ export async function validateUser(formData: FormData) {
         email,
         attempts: 1,
         last_attempt_at: new Date().toISOString(),
-        locked_until: new Date(Date.now() + 60_000).toISOString(),
+        locked_until: null, // changed from new Date(Date.now() + 60_000).toISOString()
       });
     }
     return { success: false, error: "Email or password is incorrect." };
