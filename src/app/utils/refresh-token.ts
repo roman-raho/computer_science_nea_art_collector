@@ -44,7 +44,7 @@ export async function refreshAccessToken(): Promise<{
     const newAccessToken = jwt.sign(
       { userId: refreshTokenData.user_id },
       JWT_SECRET!,
-      { expiresIn: "10s" }
+      { expiresIn: "15s" }
     );
 
     const newRefreshToken = jwt.sign(

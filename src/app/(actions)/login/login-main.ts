@@ -153,7 +153,7 @@ export async function validateUser(formData: FormData) {
       // create access token
       { userId: userDetails.id },
       process.env.JWT_SECRET!,
-      { expiresIn: "10s" }
+      { expiresIn: "15s" }
     );
 
     const refreshToken = jwt.sign(

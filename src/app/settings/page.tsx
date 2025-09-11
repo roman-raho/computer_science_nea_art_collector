@@ -1,13 +1,36 @@
 "use client";
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { updatePassword, validatePassword } from '../(actions)/login/login-main';
+import { check2faStatus, toggle2fa } from '../(actions)/login/utils';
 
 export default function Settings() {
   const [passwordCorrect, setPasswordCorrect] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [worked, setWorked] = useState<string | null>(null);
+  const [twoFAEnabled, setTwoFAEnabled] = useState(false);
 
+  useEffect(() => {
+    async function fetch2FAStatus() {
+      const status = await check2faStatus();
+      setTwoFAEnabled(status.success!);
+    }
+    fetch2FAStatus();
+  }, []);
+
+  useEffect(() => {
+    toggle2FA(twoFAEnabled);
+  }, [twoFAEnabled]);
+
+  async function toggle2FA(twofaOn: boolean) {
+    const result = await toggle2fa(twofaOn);
+    if (!result!.success) {
+      setError(result!.error || "An unknown error occurred");
+    }
+    else {
+      setError(null);
+    }
+  }
   async function checkPasswordValid(formData: FormData) {
     const result = await validatePassword(formData);
     console.log(result || "no result");
@@ -30,6 +53,8 @@ export default function Settings() {
       setPasswordCorrect(false);
     }
   }
+
+  const toggle = () => setTwoFAEnabled(!twoFAEnabled);
 
   return (
     <main className='flex flex-col justify-start pl-50 py-10 items-start h-screen w-screen'>
@@ -66,6 +91,26 @@ export default function Settings() {
           >Submit</button>
         </form>
       )}
+
+      {/* 2fa */}
+      <div className="flex items-center gap-3 mt-8">
+        <span className="text-lg">Two-Factor Authentication</span>
+        <button
+          type="button"
+          onClick={async () => { await toggle2FA(!twoFAEnabled); toggle() }}
+          className={`relative cursor-pointer inline-flex h-6 w-12 items-center rounded-full transition-colors ${twoFAEnabled ? "bg-green-500" : "bg-gray-300"
+            }`}
+        >
+          <span
+            className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${twoFAEnabled ? "translate-x-6" : "translate-x-1"
+              }`}
+          />
+        </button>
+        <span className="text-sm text-gray-600">
+          {twoFAEnabled ? "Enabled" : "Disabled"}
+        </span>
+      </div>
+
     </main>
   )
 }

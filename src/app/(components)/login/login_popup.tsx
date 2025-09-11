@@ -5,6 +5,7 @@ import { useLoginModal } from '@/app/lib/login/login-modal';
 import React, { useState } from 'react'
 import { IoMdClose } from "react-icons/io";
 import emailjs from '@emailjs/browser';
+import { validateOTP } from '@/app/(actions)/login/email-verification';
 
 export default function LoginPopup() {
   const { isOpen, close, switchToSignup } = useLoginModal()
@@ -86,14 +87,14 @@ function SignUpPopup() {
 
   async function sendOTP(email: string, otp: number) {
     try {
+      await emailjs.init({ publicKey: process.env.NEXT_PUBLIC_EMAIL_JS_PUBLIC! });
       await emailjs.send( // send email using emailjs
         process.env.NEXT_PUBLIC_EMAIL_JS_SERVICE_ID!,
         process.env.NEXT_PUBLIC_EMAIL_JS_TEMPLATE_ID!,
         {
-          to_email: email,
-          otp_code: otp,
-        },
-        process.env.NEXT_PUBLIC_EMAIL_JS_PUBLIC!,
+          email: email,
+          passcode: otp.toString(),
+        }
       );
       switchToEmailVerif(); // switch to email verification popup to enter OTP
     } catch (error) {
@@ -156,22 +157,40 @@ function SignUpPopup() {
 function EmailVerificationPopup() {
 
   const { isOpen, close, userCreated } = useLoginModal();
+  const [error, setError] = useState<string | null>(null);
 
-  async function handleEmailVerification() {
-    return
+  async function handleEmailVerification(formData: FormData) {
+    console.log("Handling email verification")
+    const otpCode = formData.get("otp-code")?.toString();
+    if (!otpCode) {
+      setError("You need to enter a code");
+      return;
+    }
+
+    const result = await validateOTP(parseInt(otpCode), userCreated.email!);
+    if (!result.success) {
+      setError(result.error || "An unknown error occurred");
+    } else {
+      setError(null);
+      close();
+    }
   }
 
   if (isOpen !== "email-verif") return null
 
   return (
-    <div
+    <form
       className='fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white border border-gray-300 py-5 px-6 rounded-lg shadow-lg z-50 flex flex-col'
       onClick={(e) => e.stopPropagation()}
+      action={handleEmailVerification}
     >
-      <h2>Verify Email</h2>
-      <button onClick={handleEmailVerification} className='text-green-500 hover:text-green-700'>Verify</button>
-      <button onClick={close} className='hover:text-neutral-700'>Skip</button>
-    </div>
+      <h2 className='font-bold text-xl mb-3'>Verify Email</h2>
+      <h3 className='text-sm mb-2'>Please enter the 6 digit OTP sent to your email</h3>
+      {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
+      <input type="text" name="otp-code" maxLength={6} className='border border-gray-200 text-center rounded-xl text-base p-2 my-1' />
+      <button type="submit" className='text-green-500 border cursor-pointer hover:bg-green-100 duration-100 rounded-xl w-[50%] mx-auto my-3'>Verify</button>
+      <button onClick={close} type="button" className='hover:text-neutral-700 text-sm'>Don&apos;t enable 2FA</button>
+    </form>
   )
-
 }
+

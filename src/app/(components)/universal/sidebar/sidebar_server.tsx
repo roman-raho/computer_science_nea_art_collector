@@ -1,7 +1,7 @@
 "use server";
 
 import SidebarClient from "./sidebar_client";
-import { checkSignedIn } from "@/app/(actions)/login/session";
+import { checkSignedIn } from "@/app/(actions)/login/utils";
 
 export default async function Sidebar() {
   const session = await checkSignedIn();
