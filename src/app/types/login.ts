@@ -20,5 +20,8 @@ export const passwordChangeSchema = z
     "Password must contain at least one number and one special character"
   );
 
+export const emailSchema = z.email();
+
 export type LoginDetails = z.infer<typeof loginDetailsSchema>; // export type for use in other files
 export type PasswordChange = z.infer<typeof passwordChangeSchema>;
+export type Email = z.infer<typeof emailSchema>;

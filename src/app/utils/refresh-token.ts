@@ -44,14 +44,14 @@ export async function refreshAccessToken(): Promise<{
     const newAccessToken = jwt.sign(
       { userId: refreshTokenData.user_id },
       JWT_SECRET!,
-      { expiresIn: "15s" }
+      { expiresIn: "15m" }
     );
 
     const newRefreshToken = jwt.sign(
       // generate new refresh token
       { userId: refreshTokenData.user_id, jti: jtiNew }, // store jti
       JWT_SECRET!,
-      { expiresIn: "10m" }
+      { expiresIn: "14d" }
     );
 
     cookieStore.set("access", newAccessToken, {

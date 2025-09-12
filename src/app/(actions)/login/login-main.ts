@@ -105,7 +105,7 @@ export async function validateUser(formData: FormData) {
 
   const { data: userDetails, error: userDataError } = await supabaseAdmin // find user with same email to retrieve password to compare
     .from("users")
-    .select("password_hash,id")
+    .select("password_hash,id,email,twofa_enabled")
     .eq("email", email)
     .maybeSingle();
 
@@ -114,8 +114,6 @@ export async function validateUser(formData: FormData) {
   if (userDataError) return { success: false, error: "Failed to fetch user" };
 
   const isMatch = await bcrypt.compare(password, userDetails.password_hash); // use bcrypt password compare function to comapre plaintext password with hashed one
-
-  const jti = crypto.randomUUID();
 
   if (!isMatch) {
     // if it isnt a match first we need to add a log to the DB that there was a login failure
@@ -148,44 +146,79 @@ export async function validateUser(formData: FormData) {
       })
       .eq("email", email);
 
-    // if they match generate cookies
-    const accessToken = jwt.sign(
-      // create access token
-      { userId: userDetails.id },
-      process.env.JWT_SECRET!,
-      { expiresIn: "15s" }
-    );
+    const randomEmailVerificationToken = Math.floor(
+      100000 + Math.random() * 900000
+    ); // generate random 6 digit number
 
-    const refreshToken = jwt.sign(
-      // create refresh token
-      { userId: userDetails.id, jti: jti },
-      process.env.JWT_SECRET!,
-      { expiresIn: "3m" }
-    );
+    await supabaseAdmin.from("email_verifications").insert([
+      // insert a row into the email verification table storing the token that will be used to verify
+      {
+        user_id: userDetails.id,
+        token: randomEmailVerificationToken,
+        used: false,
+        expires_at: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
+      },
+    ]);
 
-    const cookieStore = await cookies();
-
-    // store it in cookies
-    cookieStore.set("access", accessToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "lax",
-      path: "/",
-    });
-    cookieStore.set("refresh", refreshToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "lax",
-      path: "/",
-    });
-
-    await supabaseAdmin
-      .from("refresh_tokens")
-      .insert([{ id: jti, user_id: userDetails.id }]);
-
-    return { success: true };
+    return {
+      success: true,
+      OTP: randomEmailVerificationToken,
+      email: userDetails.email,
+      twofa_enabled: userDetails.twofa_enabled,
+    };
   }
   return { success: false, error: "Password incorrect" };
+}
+
+export async function generateLoginCookies(email?: string) {
+  const { data: userDetails, error: userDataError } = await supabaseAdmin
+    .from("users")
+    .select("password_hash,id,email")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (!userDetails || userDataError) {
+    console.log("User not found or error occurred:", {
+      userDetails,
+      userDataError,
+    });
+    return { success: false, error: "User not found" };
+  }
+  const jti = crypto.randomUUID();
+
+  const accessToken = jwt.sign(
+    { userId: userDetails.id },
+    process.env.JWT_SECRET!,
+    { expiresIn: "15m" }
+  );
+
+  const refreshToken = jwt.sign(
+    { userId: userDetails.id, jti: jti },
+    process.env.JWT_SECRET!,
+    { expiresIn: "14d" }
+  );
+
+  const cookieStore = await cookies();
+
+  cookieStore.set("access", accessToken, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+  });
+
+  cookieStore.set("refresh", refreshToken, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+  });
+
+  await supabaseAdmin
+    .from("refresh_tokens")
+    .insert([{ id: jti, user_id: userDetails.id }]);
+
+  return { success: true };
 }
 
 export async function logoutUser() {
@@ -261,7 +294,11 @@ export async function validatePassword(formData: FormData) {
   return { success: false, error: "Incorrect password." };
 }
 
-export async function updatePassword(formData: FormData) {
+export async function updatePassword(
+  formData: FormData,
+  loggedIn: boolean = true,
+  email?: string
+) {
   const newPassword = formData.get("pass1")?.toString().trim(); // get password 1 and 2
   const confirmPassword = formData.get("pass2")?.toString().trim();
 
@@ -285,41 +322,48 @@ export async function updatePassword(formData: FormData) {
 
   const newSalt = await bcrypt.genSalt(); // generate new salt
   const newHashPassword = await bcrypt.hash(newPassword, newSalt); // encrypt
-
-  const cookieData = await cookies();
-  const accessToken = cookieData.get("access")?.value; // get cookeis for userId
-
-  let userId: string;
-
-  if (accessToken) {
-    // update cookies and get userId
-    try {
-      const secret = new TextEncoder().encode(process.env.JWT_SECRET);
-      const { payload } = await jwtVerify(accessToken, secret);
-      userId = payload.userId as string;
-    } catch {
+  if (loggedIn) {
+    const cookieData = await cookies();
+    const accessToken = cookieData.get("access")?.value; // get cookeis for userId
+    let userId: string;
+    if (accessToken) {
+      // update cookies and get userId
+      try {
+        const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+        const { payload } = await jwtVerify(accessToken, secret);
+        userId = payload.userId as string;
+      } catch {
+        const refreshResult = await refreshAccessToken();
+        if (!refreshResult.success) {
+          return { success: false, error: "Session Expired" };
+        }
+        userId = refreshResult.userId!;
+      }
+    } else {
       const refreshResult = await refreshAccessToken();
-      if (!refreshResult.success) {
-        return { success: false, error: "Session Expired" };
+      if (!refreshResult) {
+        return { success: false, error: "Session expired." };
       }
       userId = refreshResult.userId!;
     }
+    const { error: passwordChangeError } = await supabaseAdmin // update password + get error
+      .from("users")
+      .update({ password_hash: newHashPassword })
+      .eq("id", userId);
+    if (passwordChangeError)
+      // if error then tell user
+      return { success: false, error: "Updating password error." };
   } else {
-    const refreshResult = await refreshAccessToken();
-    if (!refreshResult) {
-      return { success: false, error: "Session expired." };
+    if (!email) return { success: false, error: "No email provided." };
+    const { error: passwordChangeError } = await supabaseAdmin
+      .from("users")
+      .update({ password_hash: newHashPassword })
+      .eq("email", email);
+
+    if (passwordChangeError) {
+      return { success: false, error: "Error updaing password." };
     }
-    userId = refreshResult.userId!;
   }
-
-  const { error: passwordChangeError } = await supabaseAdmin // update password + get error
-    .from("users")
-    .update({ password_hash: newHashPassword })
-    .eq("id", userId);
-
-  if (passwordChangeError)
-    // if error then tell user
-    return { success: false, error: "Updating password error." };
 
   return { success: true }; // succes = true
 }
