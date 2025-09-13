@@ -21,6 +21,7 @@ export default function LoginPopup() {
     const result = await validateUser(formData);
     if (!result.success) {
       setError(result.error || "An unknown error occurred");
+      return;
     } else {
       setError(null);
       console.log("correct")

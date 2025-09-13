@@ -9,7 +9,7 @@ import { updatePassword } from "@/app/(actions)/login/login-main";
 
 export default function ForgotPassword() {
   const [error, setError] = useState<string | null>(null);
-  const { switchToEmailVerifPassword, setForgotEmail } = useLoginModal();
+  const { switchToEmailVerifPassword, setForgotEmail, isOpen, close } = useLoginModal();
 
 
   async function handleSubmit(formData: FormData) {
@@ -58,6 +58,7 @@ export default function ForgotPassword() {
     await sendOTP(email, OTP!); // send the OTP to the user's email
   }
 
+  if (isOpen !== "forgot-password") return null;
 
   return (
     <form

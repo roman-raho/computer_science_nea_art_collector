@@ -87,18 +87,30 @@ export async function validateUser(formData: FormData) {
     // check presence of both fields
     return { success: false, error: "Missing required fields" };
 
-  const { data: lockRow } = await supabaseAdmin // check if email has any locked rows
+  const { data: lockRow } = await supabaseAdmin
     .from("login_attempts")
     .select("locked_until")
     .eq("email", email)
     .maybeSingle();
 
-  if (lockRow?.locked_until && new Date(lockRow.locked_until) > new Date()) {
-    // if it is locked return false
+  console.log("Lock check for email:", email);
+  console.log("Lock row:", lockRow);
+  console.log("Current time:", new Date());
+  console.log(
+    "Locked until:",
+    lockRow?.locked_until ? new Date(lockRow.locked_until) : "No lock time"
+  );
+
+  if (
+    lockRow &&
+    lockRow.locked_until &&
+    new Date(lockRow.locked_until) > new Date()
+  ) {
     const ms = new Date(lockRow.locked_until).getTime() - Date.now();
     const minutes = Math.ceil(ms / 60000);
+    console.log("User is locked for", minutes, "minutes");
     return {
-      success: false, // return to user how long it is locked for
+      success: false,
       error: `Too many attempts. Try again in ~${minutes} min.`,
     };
   }
@@ -125,13 +137,14 @@ export async function validateUser(formData: FormData) {
     );
 
     if (rpcError) {
-      await supabaseAdmin.from("login_attempts").insert({
-        // adds a row that locks it until 1 hr later
-        email,
-        attempts: 1,
-        last_attempt_at: new Date().toISOString(),
-        locked_until: null, // changed from new Date(Date.now() + 60_000).toISOString()
-      });
+      // await supabaseAdmin.from("login_attempts").insert({
+      //   // adds a row that locks it until 1 hr later
+      //   email,
+      //   attempts: 1,
+      //   last_attempt_at: new Date().toISOString(),
+      //   locked_until: null, // changed from new Date(Date.now() + 60_000).toISOString()
+      // });
+      console.error("Failed to record login failure:", rpcError);
     }
     return { success: false, error: "Email or password is incorrect." };
   }

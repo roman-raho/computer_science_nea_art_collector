@@ -5,7 +5,7 @@ import { useState } from "react";
 
 export default function EmailVerificationPopup() {
 
-  const { isOpen, close, userCreated, loginDetails, setLoginDetails, setUserCreated, forgotEmail, setForgotEmail, switchToNewPassword } = useLoginModal();
+  const { isOpen, close, userCreated, loginDetails, setLoginDetails, setUserCreated, forgotEmail, switchToNewPassword } = useLoginModal();
   const [error, setError] = useState<string | null>(null);
 
   async function handleEmailVerification(formData: FormData) {
@@ -48,7 +48,7 @@ export default function EmailVerificationPopup() {
       {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
       <input type="text" name="otp-code" maxLength={6} className='border border-gray-200 text-center rounded-xl text-base p-2 my-1' />
       <button type="submit" className='text-green-500 border cursor-pointer hover:bg-green-100 duration-100 rounded-xl w-[50%] mx-auto my-3'>Verify</button>
-      <button onClick={close} type="button" className='hover:text-neutral-700 text-sm'>{(isOpen === "email-verif-signup") ? "Don&apos;t enable 2FA" : "Exit"}</button>
+      <button onClick={close} type="button" className='hover:text-neutral-700 text-sm'>{(isOpen === "email-verif-signup") ? `` : "Exit"}</button>
     </form>
   )
 }
