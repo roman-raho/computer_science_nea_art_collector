@@ -20,7 +20,7 @@ def minmax_norm(s: pd.Series) -> pd.Series: # normalisation
   mn, mx = s.min(), s.max()
   if not np.isfinite(mn) or not np.isfinite(mx) or mx <= mn:
     return pd.Series(np.zeros(len(s)), index=s.index, dtype=float)
-  return (s - mn) / {mx - mn}
+  return (s - mn) / (mx - mn)
 
 def coefvar(x: pd.Series) -> float: # calculate the variance coefficient 
   x = x.dropna()
@@ -33,8 +33,8 @@ def coefvar(x: pd.Series) -> float: # calculate the variance coefficient
   return float(sd / abs(m))
 
 def recency_index(years_since_last: float) -> float:
-  years_since_last = max(years_since_last, 0.0)
-  return float(np.exp(-years_since_last / 3.0)) # divide by 3 in order to limit values
+    years_since_last = max(years_since_last, 0.0)
+    return float(np.exp(-years_since_last / 3.0)) # divide by 3 in order to limit values
 
 def safe_ratio(num: pd.Series, den: pd.Series) -> pd.Series: # calcualte the safe ratio
   den = den.replace(0, np.nan)

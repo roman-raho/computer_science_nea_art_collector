@@ -39,28 +39,21 @@ def compute_house_scores(houses: pd.DataFrame, # get each json dataset as arguem
   df["date_of_auction"] = pd.to_datetime(df["date_of_auction"], errors="coerce") # convert the date in the dataframe
   df = df.dropna(subset=["date_of_auction"]) # drop any null
 
-  # normalise reserve semantics - treat negative numbers or Nan as "no reserve"
-  df["has_reserve"] = df["reserve_price"].apply(lambda x: pd.notna(x) and float(x)) # create a column to check if there is a reserve price
-  # sold if final is greater than the reserve - if no reserve assume it was sold
-  df["sold"] = np.where(df["has_reserve"], # create a columns cold sole
-                        df["final_price"] >= df["reserve_price"],
-                        True)
-  
-  with warnings.catch_warnings():
-    warnings.simplefilter("ignore", category=RuntimeWarning)
-    df["premium"] = np.where( # calculate the premium
-      (df["has_reserve"]) & (df["reserve_price"].astype(float) > 0),
-      (df["final_price"] - df["reserve_price"]) / df["reserve_price"], # premium is the percentage paid over the reserve
-      np.nan
-    )
-  
+  # reserve mask (true only when numeric is greater than 0)
+  rp = pd.to_numeric(df["reserve_price"], errors="coerce")
+  fp = pd.to_numeric(df["final_price"], errors="coerce")
+
+  df["has_reserve"] = rp.notna() & (rp > 0)
+  df["sold"] = (~df["has_reserve"]) | (fp >= rp)
+  df["premium"] = np.where(df["has_reserve"] & fp.notna(), (fp - rp) / rp, np.nan)
+
   #3yr window
   start_3y = pd.Timestamp(f"{current_year-3}-01-01") # start of the 3 years
   df3 = df[df["date_of_auction"] >= start_3y] # create a copy of the data with only auctions that happened post 3yr
 
   #total hamme in last 3yr - use log to reduce skew
   depth = (df3.groupby("auction_house_id")["final_price"]
-                .sum().pipe(np.log1p))
+              .sum().pipe(np.log1p).rename("depth"))
   
   grp = df.groupby("auction_house_id", dropna=False) # group all auction houses by id
   lots_total = grp.size().rename("lots_total") # get total lots from house
@@ -68,7 +61,7 @@ def compute_house_scores(houses: pd.DataFrame, # get each json dataset as arguem
   lots_sold = grp["sold"].sum().rename("lots_sold") # get total lots sold
   clearance=safe_ratio(lots_sold, lots_with_reserve) # calcaulte the ration to lots sold and lots with reserve
   avg_bids = grp["number_of_bids"].mean().rename("avg_bids") # calculate the number of average bids per year
-  median_premium = grp["premium"].median(skipna=True).rename("median_premium") # calculate the median premium
+  median_premium = grp["premium"].median().rename("median_premium") # calculate the median premium
 
   # volatility
   df_q = df.copy() # create a copy
@@ -80,12 +73,18 @@ def compute_house_scores(houses: pd.DataFrame, # get each json dataset as arguem
     sub = sub.sort_values("quarter_end").tail(12)
     return coefvar(sub["final_price"])
   
-  cv = q_median.groupby("auction_house_id").apply(cv_last_12).rename("cv") # split the table into one mini dataset per house then run the volatility function. sorting by quarter. 
+  cv = (
+    q_median
+      .groupby("auction_house_id", group_keys=False)[["quarter_end","final_price"]]
+      .apply(cv_last_12)
+      .rename("cv")
+  ) # split the table into one mini dataset per house then run the volatility function. sorting by quarter. 
 
-  feat=pd.concat([ # concatenate the features
-    lots_total, lots_with_reserve, lots_sold,
-    clearance, avg_bids, median_premium, depth, cv
-  ], axis=1).fillna({
+  feat = pd.DataFrame(index=grp.groups.keys())
+  feat = feat.join([lots_total, lots_with_reserve, lots_sold, clearance, avg_bids, median_premium], how='left')
+  feat = feat.join(depth, how='left')
+  feat = feat.join(cv, how='left')
+  feat = feat.fillna({
     "median_premium": 0.0,
     "depth": 0.0
   })
@@ -117,7 +116,7 @@ def compute_house_scores(houses: pd.DataFrame, # get each json dataset as arguem
   conf = 0.6 * np.minimum(feat["lots_total"]/50.0, 1.0) + 0.4 * rec_i.fillna(0.0) # calculate the confidence score
 
   out = pd.DataFrame({ # form the output for the json
-    "auction_house_id": feat.index,
+    "auction_house_id": feat.index.values,
     "auction_house_score": auction_house_score.round(2),
     "auction_house_tier": auction_house_score.apply(tier),
     "volatility_score": vol_score.round(2),
