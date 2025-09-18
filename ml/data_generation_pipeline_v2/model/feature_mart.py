@@ -191,7 +191,8 @@ def build_feature_mart( # takes in all tables that we will use features from
 
     # target
     df["y_log_price"] = safe_log1p(df["final_price"])  # log1p to include possible zeros
-
+    df["y_price"] = safe_num(df["final_price"]).fillna(0.0) # NEW
+    
     # simple region from location , last value
     df["region"] = (
         df["location"].astype(str).str.split(",").str[-1].str.strip().str.lower()

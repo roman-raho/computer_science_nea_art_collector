@@ -148,13 +148,13 @@ def nested_elasticnet_report(
     )
 
     X_train = train_df[numeric_cols + cat_cols] # get the training data from the correct columns
-    y_train = train_df["y_log_price"].values # get the output
+    y_train = train_df["y_log_price"].values # NEW get the output
 
     _log("Fitting GridSearchCV (time-aware)") # log to console
     gscv.fit(X_train, y_train) # fit the data
 
     X_test = test_df[numeric_cols + cat_cols] # prepare testing data
-    y_test = test_df["y_log_price"].values
+    y_test = test_df["y_log_price"].values # NEW
     yhat_test = gscv.predict(X_test) # test
 
     price_true = np.expm1(y_test) # undo logs
