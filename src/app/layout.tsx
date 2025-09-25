@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import LoginPopup from "./(components)/login/login_popup";
 import Sidebar from "./(components)/universal/sidebar/sidebar_server";
+import { Providers } from "./providers";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,7 +32,7 @@ export default function RootLayout({
       >
         <LoginPopup />
         <Sidebar />
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
