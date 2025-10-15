@@ -5,9 +5,10 @@ import React from "react";
 export default function ArtworkCard({ artwork }: { artwork: any }) {
 
   const openModal = useArtworkModal((state) => state.openModal); // get state action
+
   return (
     <div
-      onClick={() => openModal(artwork)} // set to artwork
+      onClick={() => { openModal(artwork); console.log(artwork) }} // set to artwork
       className="border border-gray-300 w-[80%] mx-auto cursor-pointer rounded-xl p-6 flex items-center gap-8 shadow-sm hover:shadow-md transition">
       <div className="flex-shrink-0">
         <Image

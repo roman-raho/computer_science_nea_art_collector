@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 
-type Artwork = {
+export type Artwork = {
   // artowkr
   id?: string;
   image_url?: string;
