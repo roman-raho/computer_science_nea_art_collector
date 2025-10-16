@@ -1,19 +1,42 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { IoAddOutline } from "react-icons/io5";
 import { useArtworkModal } from "@/app/lib/collection/update-artwork";
-import { updateArtwork } from "@/app/(actions)/collection/update-artwork";
+import { deleteArtwork, updateArtwork } from "@/app/(actions)/collection/update-artwork";
+import { useQueryClient } from "@tanstack/react-query";
+import { MdOutlineFileUpload } from "react-icons/md";
 
 export default function ArtworkModal() {
   const { isOpen, selectedArtwork, closeModal } = useArtworkModal();
-
+  const queryClient = useQueryClient();
 
   const [draft, setDraft] = useState(selectedArtwork);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => setDraft(selectedArtwork), [selectedArtwork]); // if the artwork changes set draft
+  const [file, setFile] = useState<File | null>(null);
+  const [imageChanged, setImageChanged] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const previewUrl = useMemo(() => (
+    file ? URL.createObjectURL(file) : null
+  ), [file]);
+
+  useEffect(() => {
+    setDraft(selectedArtwork ?? null);
+    setError(null);
+    setFile(null);
+    setImageChanged(false);
+  }, [selectedArtwork]); // if the artwork changes set draft
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
+  const displayImageUrl = previewUrl ?? draft?.image_url ?? "";
 
   const handleChange = (key: string) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -27,11 +50,20 @@ export default function ArtworkModal() {
     setDraft((d: any) => ({ ...d, [key]: value }));
   }
 
+  const handlePickImage = () => fileInputRef.current?.click();
+
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] ?? null;
+    setFile(f);
+    setImageChanged(true);
+  };
+
   const handleSave = async () => {
     try {
       setSaving(true);
       if (!draft) return;
-      const formData = new FormData();
+
+      const formData = new FormData(); // append all fields to form data
       formData.append("title", draft.title ?? "");
       formData.append("artistName", draft.artist_name ?? "");
       formData.append("medium", draft.medium ?? "");
@@ -44,19 +76,50 @@ export default function ArtworkModal() {
       formData.append("storageCompany", draft.storage_company ?? "");
       formData.append("notes", draft.notes ?? "");
 
-      const res = await updateArtwork(formData, selectedArtwork?.id)
+      if (imageChanged && file) {
+        formData.append("imageFileMain", file);
+      }
+
+      const res = await updateArtwork(formData, selectedArtwork?.id, Boolean(imageChanged && file)) // call server action
       if (res.success) {
+        queryClient.invalidateQueries({ queryKey: ["artworks"] });
         setSaving(false);
+        setImageChanged(false);
+        setFile(null);
         setDraft(null);
         closeModal();
       } else {
         setSaving(false);
         setError(res.error || "Failed to save artwork.");
       }
-    } catch (error) {
+    } catch (error) { // catch any errors
       setSaving(false);
       setError((error as Error).message || "Failed to save artwork.");
     }
+  }
+
+  const deleteArt = async () => {
+    if (!selectedArtwork?.id) return;
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete “${selectedArtwork.title || "this artwork"}”?`
+    );
+    if (!confirmDelete) return;
+
+    const res = await deleteArtwork(selectedArtwork.id);
+    if (res.success) {
+      await queryClient.invalidateQueries({ queryKey: ["artworks"] });
+      closeModal();
+    } else {
+      setError(res.error || "Failed to delete artwork.");
+    }
+  }
+
+  const handleClose = () => {
+    closeModal();
+    setDraft(null);
+    setError(null);
+    setFile(null);
+    setImageChanged(false);
   }
 
   if (!isOpen || !selectedArtwork) return null;
@@ -65,24 +128,77 @@ export default function ArtworkModal() {
     <div className="fixed inset-0 z-[999] bg-black/50 backdrop-blur-sm flex items-center justify-center p-6">
       <form className="relative bg-white w-full max-w-3xl rounded-2xl shadow-lg overflow-y-auto max-h-[90vh] p-8">
         <button
-          onClick={closeModal}
+          onClick={handleClose}
           className="absolute cursor-pointer top-4 right-4 text-gray-500 hover:text-black text-xl"
         >
           <IoAddOutline className="transform rotate-45" size={23} />
         </button>
 
         <div className="flex flex-col items-center w-full p-5 gap-8">
-          {draft?.image_url && (
-            <div className="w-full md:w-1/2">
-              <Image
-                src={draft?.image_url || ""}
-                alt={draft?.title || "Artwork"}
-                width={800}
-                height={800}
-                className="w-full h-auto rounded-lg object-cover"
-              />
-            </div>
-          )}
+          <div className="w-full md:w-1/2">
+            {displayImageUrl ? (
+              <div className="relative group">
+                <Image
+                  src={displayImageUrl}
+                  alt={draft?.title || "Artwork"}
+                  width={1600}
+                  height={1600}
+                  className="w-full h-auto rounded-lg object-cover"
+                />
+                <div className="absolute inset-0 rounded-lg bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                  <button
+                    type="button"
+                    onClick={handlePickImage}
+                    className="px-3 py-2 rounded-lg bg-white text-black text-sm font-medium flex items-center gap-2"
+                  >
+                    <MdOutlineFileUpload size={18} />
+                    {imageChanged ? "Change image" : "Upload image"}
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleFileSelected}
+                  // name not needed here; we append manually to FormData
+                  />
+                </div>
+
+                {imageChanged && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFile(null);
+                      setImageChanged(false);
+                    }}
+                    className="absolute top-2 right-2 text-xs px-2 py-1 rounded bg-black/70 text-white"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            ) : (
+              <label
+                className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100"
+                onClick={handlePickImage}
+              >
+                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                  <MdOutlineFileUpload size={40} className="text-gray-400 mb-2" />
+                  <p className="text-sm text-gray-600">
+                    <span className="font-medium">Click to upload</span> or drag and drop
+                  </p>
+                  <p className="text-xs text-gray-500">PNG, JPG</p>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFileSelected}
+                />
+              </label>
+            )}
+          </div>
 
           <div className="flex-1">
             <input
@@ -229,6 +345,7 @@ export default function ArtworkModal() {
               >
                 {saving ? "Saving…" : "Save"}
               </button>
+
               <button
                 onClick={closeModal}
                 type="button"
@@ -236,7 +353,16 @@ export default function ArtworkModal() {
               >
                 Cancel
               </button>
+
+              <button
+                onClick={deleteArt}
+                type="button"
+                className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700"
+              >
+                Delete
+              </button>
             </div>
+
           </div>
         </div>
       </form>

@@ -18,7 +18,7 @@ export async function updateArtwork(
   } catch (err) {
     return {
       success: false,
-      error: "Invalid add artwork entries.",
+      error: "Invalid update artwork entries.",
       details: err,
     };
   }
@@ -61,7 +61,7 @@ export async function updateArtwork(
   const { error: updateError } = await supabaseAdmin
     .from("artwork")
     .update(payload)
-    .eq("artwork_id", selectedArtworkId);
+    .eq("id", selectedArtworkId);
 
   if (updateError) {
     return {
@@ -70,6 +70,25 @@ export async function updateArtwork(
       details: updateError.message,
     };
   }
+
+  return { success: true };
+}
+
+export async function deleteArtwork(artworkId: string) {
+  if (!artworkId) return { success: false, error: "No artwork ID provided." }; // if no ID cannot delete the artwork
+
+  const { error } = await supabaseAdmin // find and delete the artwork
+    .from("artwork")
+    .delete()
+    .eq("id", artworkId);
+
+  if (error)
+    // if error return to user
+    return {
+      success: false,
+      error: "Failed to delete artwork.",
+      details: error.message,
+    };
 
   return { success: true };
 }
