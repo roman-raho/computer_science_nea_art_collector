@@ -29,8 +29,8 @@ export const AddArtworkSchema = z.object({
     .max(60)
     .optional()
     .transform((val) => (val?.trim() === "" ? undefined : val)),
-  widthCm: z.coerce.number().positive().optional(),
-  heightCm: z.coerce.number().positive().optional(),
+  widthCm: z.coerce.number().min(0).optional(),
+  heightCm: z.coerce.number().min(0).optional(),
   depthCm: z.coerce.number().min(0).optional(),
   dateAcquired: z.coerce.date().optional(),
   locationAcquired: z
